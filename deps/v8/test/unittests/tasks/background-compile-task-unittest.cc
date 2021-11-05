@@ -80,18 +80,9 @@ class BackgroundCompileTaskTest : public TestWithNativeContext {
             shared->function_literal_id(), nullptr);
 
     return new BackgroundCompileTask(
-        outer_parse_info.get(), function_name, function_literal,
+        isolate, outer_parse_info.get(), shared, function_literal,
         isolate->counters()->worker_thread_runtime_call_stats(),
         isolate->counters()->compile_function_on_background(), FLAG_stack_size);
-  }
-
- protected:
-  void SetUp() override {
-    // TODO(leszeks): Support background finalization in compiler dispatcher.
-    if (FLAG_finalize_streaming_on_background) {
-      GTEST_SKIP_(
-          "Parallel compile tasks don't yet support background finalization");
-    }
   }
 
  private:
@@ -118,7 +109,7 @@ TEST_F(BackgroundCompileTaskTest, SyntaxError) {
 
   task->Run();
   ASSERT_FALSE(Compiler::FinalizeBackgroundCompileTask(
-      task.get(), shared, isolate(), Compiler::KEEP_EXCEPTION));
+      task.get(), isolate(), Compiler::KEEP_EXCEPTION));
   ASSERT_TRUE(isolate()->has_pending_exception());
 
   isolate()->clear_pending_exception();
@@ -144,7 +135,7 @@ TEST_F(BackgroundCompileTaskTest, CompileAndRun) {
 
   task->Run();
   ASSERT_TRUE(Compiler::FinalizeBackgroundCompileTask(
-      task.get(), shared, isolate(), Compiler::KEEP_EXCEPTION));
+      task.get(), isolate(), Compiler::KEEP_EXCEPTION));
   ASSERT_TRUE(shared->is_compiled());
 
   Smi value = Smi::cast(*RunJS("f(100);"));
@@ -170,7 +161,7 @@ TEST_F(BackgroundCompileTaskTest, CompileFailure) {
 
   task->Run();
   ASSERT_FALSE(Compiler::FinalizeBackgroundCompileTask(
-      task.get(), shared, isolate(), Compiler::KEEP_EXCEPTION));
+      task.get(), isolate(), Compiler::KEEP_EXCEPTION));
   ASSERT_TRUE(isolate()->has_pending_exception());
 
   isolate()->clear_pending_exception();
@@ -215,7 +206,7 @@ TEST_F(BackgroundCompileTaskTest, CompileOnBackgroundThread) {
   V8::GetCurrentPlatform()->CallOnWorkerThread(std::move(background_task));
   semaphore.Wait();
   ASSERT_TRUE(Compiler::FinalizeBackgroundCompileTask(
-      task.get(), shared, isolate(), Compiler::KEEP_EXCEPTION));
+      task.get(), isolate(), Compiler::KEEP_EXCEPTION));
   ASSERT_TRUE(shared->is_compiled());
 }
 
@@ -240,7 +231,7 @@ TEST_F(BackgroundCompileTaskTest, EagerInnerFunctions) {
 
   task->Run();
   ASSERT_TRUE(Compiler::FinalizeBackgroundCompileTask(
-      task.get(), shared, isolate(), Compiler::KEEP_EXCEPTION));
+      task.get(), isolate(), Compiler::KEEP_EXCEPTION));
   ASSERT_TRUE(shared->is_compiled());
 
   Handle<JSFunction> e = RunJS<JSFunction>("f();");
@@ -268,7 +259,7 @@ TEST_F(BackgroundCompileTaskTest, LazyInnerFunctions) {
 
   task->Run();
   ASSERT_TRUE(Compiler::FinalizeBackgroundCompileTask(
-      task.get(), shared, isolate(), Compiler::KEEP_EXCEPTION));
+      task.get(), isolate(), Compiler::KEEP_EXCEPTION));
   ASSERT_TRUE(shared->is_compiled());
 
   Handle<JSFunction> e = RunJS<JSFunction>("f();");

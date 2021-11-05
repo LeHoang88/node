@@ -22,7 +22,6 @@
 #include "src/roots/roots.h"
 #include "testing/gtest/include/gtest/gtest_prod.h"  // nogncheck
 #include "torque-generated/bit-fields.h"
-#include "torque-generated/field-offsets.h"
 
 // Has to be the last include (doesn't have include guards):
 #include "src/objects/object-macros.h"
@@ -147,8 +146,6 @@ class InterpreterData
  public:
   DECL_ACCESSORS(interpreter_trampoline, Code)
 
-  DECL_PRINTER(InterpreterData)
-
  private:
   DECL_ACCESSORS(raw_interpreter_trampoline, CodeT)
 
@@ -196,6 +193,11 @@ class SharedFunctionInfo
                                    HeapObject script_object,
                                    int function_literal_id,
                                    bool reset_preparsed_scope_data = true);
+
+  // Copy the data from another SharedFunctionInfo. Used for copying from a
+  // placeholder SharedFunctionInfo after an off-thread compilation into the
+  // actual SharedFunctionInfo.
+  void CopyFrom(SharedFunctionInfo other);
 
   // Layout description of the optimized code map.
   static const int kEntriesStart = 0;
@@ -381,7 +383,7 @@ class SharedFunctionInfo
   //  - a DebugInfo which holds the actual script [HasDebugInfo()].
   DECL_RELEASE_ACQUIRE_ACCESSORS(script_or_debug_info, HeapObject)
 
-  inline HeapObject script() const;
+  DECL_GETTER(script, HeapObject)
   inline void set_script(HeapObject script);
 
   // True if the underlying script was parsed and compiled in REPL mode.
@@ -533,17 +535,19 @@ class SharedFunctionInfo
   inline bool ShouldFlushCode(base::EnumSet<CodeFlushMode> code_flush_mode);
 
   enum Inlineability {
-    kIsInlineable,
     // Different reasons for not being inlineable:
     kHasNoScript,
     kNeedsBinaryCoverage,
-    kHasOptimizationDisabled,
     kIsBuiltin,
     kIsNotUserCode,
     kHasNoBytecode,
     kExceedsBytecodeLimit,
     kMayContainBreakPoints,
+    kHasOptimizationDisabled,
+    // Actually inlineable!
+    kIsInlineable,
   };
+  // Returns the first value that applies (see enum definition for the order).
   template <typename IsolateT>
   Inlineability GetInlineability(IsolateT* isolate, bool is_turboprop) const;
 

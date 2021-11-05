@@ -419,12 +419,15 @@ Expression* Parser::NewV8RuntimeFunctionForFuzzing(
   return factory()->NewCallRuntime(function, permissive_args, pos);
 }
 
-Parser::Parser(ParseInfo* info)
+Parser::Parser(LocalIsolate* local_isolate, ParseInfo* info,
+               Handle<Script> script)
     : ParserBase<Parser>(
           info->zone(), &scanner_, info->stack_limit(),
           info->GetOrCreateAstValueFactory(), info->pending_error_handler(),
           info->runtime_call_stats(), info->logger(), info->flags(), true),
+      local_isolate_(local_isolate),
       info_(info),
+      script_(script),
       scanner_(info->character_stream(), flags()),
       preparser_zone_(info->zone()->allocator(), "pre-parser-zone"),
       reusable_preparser_(nullptr),
@@ -722,7 +725,8 @@ ZonePtrList<const AstRawString>* Parser::PrepareWrappedArguments(
       zone->New<ZonePtrList<const AstRawString>>(arguments_length, zone);
   for (int i = 0; i < arguments_length; i++) {
     const AstRawString* argument_string = ast_value_factory()->GetString(
-        Handle<String>(String::cast(arguments->get(i)), isolate));
+        String::cast(arguments->get(i)),
+        SharedStringAccessGuardIfNeeded(isolate));
     arguments_for_wrapped_function->Add(argument_string, zone);
   }
   return arguments_for_wrapped_function;
@@ -848,8 +852,8 @@ void Parser::ParseFunction(Isolate* isolate, ParseInfo* info,
   }
 
   // Initialize parser state.
-  Handle<String> name(shared_info->Name(), isolate);
-  info->set_function_name(ast_value_factory()->GetString(name));
+  info->set_function_name(ast_value_factory()->GetString(
+      shared_info->Name(), SharedStringAccessGuardIfNeeded(isolate)));
   scanner_.Initialize();
 
   FunctionLiteral* result;
@@ -2595,7 +2599,7 @@ FunctionLiteral* Parser::ParseFunctionLiteral(
   // in a parallel task on a worker thread.
   bool should_post_parallel_task =
       parse_lazily() && is_eager_top_level_function &&
-      FLAG_parallel_compile_tasks && info()->parallel_tasks() &&
+      FLAG_parallel_compile_tasks && info()->dispatcher() &&
       scanner()->stream()->can_be_cloned_for_parallel_access();
 
   // This may be modified later to reflect preparsing decision taken
@@ -2694,7 +2698,10 @@ FunctionLiteral* Parser::ParseFunctionLiteral(
 
   if (should_post_parallel_task) {
     // Start a parallel parse / compile task on the compiler dispatcher.
-    info()->parallel_tasks()->Enqueue(info(), function_name, function_literal);
+    Handle<SharedFunctionInfo> shared_info =
+        local_isolate_->factory()->NewSharedFunctionInfoForLiteral(
+            function_literal, script_, false);
+    info()->dispatcher()->Enqueue(info(), shared_info, function_literal);
   }
 
   if (should_infer_name) {
@@ -3263,6 +3270,24 @@ void Parser::UpdateStatistics(Isolate* isolate, Handle<Script> script) {
   }
   isolate->counters()->total_preparse_skipped()->Increment(
       total_preparse_skipped_);
+}
+
+void Parser::UpdateStatistics(Handle<Script> script, int* use_counts,
+                              int* preparse_skipped) {
+  // Move statistics to Isolate.
+  for (int feature = 0; feature < v8::Isolate::kUseCounterFeatureCount;
+       ++feature) {
+    if (use_counts_[feature] > 0) {
+      use_counts[feature]++;
+    }
+  }
+  if (scanner_.FoundHtmlComment()) {
+    use_counts[v8::Isolate::kHtmlComment]++;
+    if (script->line_offset() == 0 && script->column_offset() == 0) {
+      use_counts[v8::Isolate::kHtmlCommentInExternalScript]++;
+    }
+  }
+  *preparse_skipped = total_preparse_skipped_;
 }
 
 void Parser::ParseOnBackground(ParseInfo* info, int start_position,

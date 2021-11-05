@@ -108,7 +108,8 @@
       'filepath': 'src/heap/cppgc/' \
                   '|src/heap/cppgc-js/' \
                   '|include/cppgc/' \
-                  '|test/unittests/heap/',
+                  '|test/unittests/heap/cppgc/' \
+                  '|test/unittests/heap/cppgc-js/',
     },
   },
 
@@ -141,7 +142,7 @@
     ],
     'merges': [
       # Only enabled on branches created with tools/release/create_release.py
-      'v8-merges@googlegroups.com',
+      # 'v8-merges@googlegroups.com',
     ],
     'wasm': [
       'wasm-v8@google.com',

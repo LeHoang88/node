@@ -543,7 +543,7 @@ class MachineRepresentationChecker {
           case IrOpcode::kParameter:
           case IrOpcode::kProjection:
             break;
-          case IrOpcode::kAbortCSAAssert:
+          case IrOpcode::kAbortCSADcheck:
             CheckValueInputIsTagged(node, 0);
             break;
           case IrOpcode::kLoad:
@@ -996,6 +996,7 @@ class MachineRepresentationChecker {
         // happens in dead code.
         return IsAnyTagged(actual);
       case MachineRepresentation::kCompressedPointer:
+      case MachineRepresentation::kCagedPointer:
       case MachineRepresentation::kFloat32:
       case MachineRepresentation::kFloat64:
       case MachineRepresentation::kSimd128:

@@ -103,7 +103,7 @@ static const char* ComputeMarker(SharedFunctionInfo shared, AbstractCode code) {
 #if V8_ENABLE_WEBASSEMBLY
 static const char* ComputeMarker(const wasm::WasmCode* code) {
   switch (code->kind()) {
-    case wasm::WasmCode::kFunction:
+    case wasm::WasmCode::kWasmFunction:
       return code->is_liftoff() ? "" : "*";
     default:
       return "";
@@ -944,9 +944,10 @@ class Ticker : public sampler::Sampler {
   void SampleStack(const v8::RegisterState& state) override {
     if (!profiler_) return;
     Isolate* isolate = reinterpret_cast<Isolate*>(this->isolate());
-    if (v8::Locker::IsActive() && (!isolate->thread_manager()->IsLockedByThread(
-                                       perThreadData_->thread_id()) ||
-                                   perThreadData_->thread_state() != nullptr))
+    if (v8::Locker::WasEverUsed() &&
+        (!isolate->thread_manager()->IsLockedByThread(
+             perThreadData_->thread_id()) ||
+         perThreadData_->thread_state() != nullptr))
       return;
     TickSample sample;
     sample.Init(isolate, state, TickSample::kIncludeCEntryFrame, true);
@@ -1382,6 +1383,30 @@ void Logger::CodeCreateEvent(LogEventsAndTags tag, Handle<AbstractCode> code,
   }
   LogSourceCodeInformation(code, shared);
   LogCodeDisassemble(code);
+}
+
+void Logger::FeedbackVectorEvent(FeedbackVector vector, AbstractCode code) {
+  DisallowGarbageCollection no_gc;
+  if (!FLAG_log_code) return;
+  MSG_BUILDER();
+  msg << "feedback-vector" << kNext << Time();
+  msg << kNext << reinterpret_cast<void*>(vector.address()) << kNext
+      << vector.length();
+  msg << kNext << reinterpret_cast<void*>(code.InstructionStart());
+  msg << kNext << vector.optimization_marker();
+  msg << kNext << vector.optimization_tier();
+  msg << kNext << vector.invocation_count();
+  msg << kNext << vector.profiler_ticks() << kNext;
+
+#ifdef OBJECT_PRINT
+  std::ostringstream buffer;
+  vector.FeedbackVectorPrint(buffer);
+  std::string contents = buffer.str();
+  msg.AppendString(contents.c_str(), contents.length());
+#else
+  msg << "object-printing-disabled";
+#endif
+  msg.WriteToLogFile();
 }
 
 // Functions
